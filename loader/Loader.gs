@@ -1,15 +1,15 @@
 /**
  * Applications API Client
  * https://github.com/Oxara-Assets/applications-api-client
- * 
+ *
  * This loader retreives and executes the client at runtime.
  * No manual updates will ever be required.
  */
 
 const APPLICATIONS_CLIENT = Object.freeze({
   VERSION: "1.0.0",
-  SOURCE_URL: 
-    "https://github.com/Oxara-Assets/applications-api-client/main/dist/latest.js"
+  SOURCE_URL:
+    "https://raw.githubusercontent.com/Oxara-Assets/applications-api-client/main/dist/latest.js"
 })
 
 /**
