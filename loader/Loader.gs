@@ -1,43 +1,69 @@
+
 /**
  * Applications API Client
  * https://github.com/Oxara-Assets/applications-api-client
  *
- * This loader retrieves and executes the client at runtime.
- * No manual updates will ever be required.
+ * This loader retrieves and executes the latest published client.
+ * The client is fetched at runtime and is not saved locally.
  */
 
 const APPLICATIONS_CLIENT = Object.freeze({
-  VERSION: "1.0.0",
-  SOURCE_URL:
-    "https://raw.githubusercontent.com/Oxara-Assets/applications-api-client/main/dist/latest.js",
-})
+  RELEASES_URL:
+    "https://api.github.com/repos/Oxara-Assets/applications-api-client/releases/latest",
+  ASSET_NAME: "latest.js",
+});
 
 /**
- * Executes the remotely hosted client.
+ * Downloads and initialises the latest published client.
  */
-
-function runApplicationClient() {
-  const response = UrlFetchApp.fetch(
-    APPLICATIONS_CLIENT.SOURCE_URL,
+function loadApplicationsClient() {
+  const releaseResponse = UrlFetchApp.fetch(
+    APPLICATIONS_CLIENT.RELEASES_URL,
     {
       method: "get",
-      followRedirects: true,
+      headers: {
+        Accept: "application/vnd.github+json",
+      },
       muteHttpExceptions: true,
     }
   );
 
-  const status = response.getResponseCode();
-
-  if (status !== 200) {
+  if (releaseResponse.getResponseCode() !== 200) {
     throw new Error(
-      `Applications API Client download failed (HTTP ${status}).`
+      `Unable to retrieve the latest client release (HTTP ${releaseResponse.getResponseCode()}).`
     );
   }
 
-  const source = response.getContentText();
+  const release = JSON.parse(releaseResponse.getContentText());
+
+  const asset = (release.assets || []).find(
+    item => item.name === APPLICATIONS_CLIENT.ASSET_NAME
+  );
+
+  if (!asset || !asset.browser_download_url) {
+    throw new Error(
+      `Release ${release.tag_name} does not contain ${APPLICATIONS_CLIENT.ASSET_NAME}.`
+    );
+  }
+
+  const sourceResponse = UrlFetchApp.fetch(
+    asset.browser_download_url,
+    {
+      method: "get",
+      muteHttpExceptions: true,
+    }
+  );
+
+  if (sourceResponse.getResponseCode() !== 200) {
+    throw new Error(
+      `Unable to download client asset (HTTP ${sourceResponse.getResponseCode()}).`
+    );
+  }
+
+  const source = sourceResponse.getContentText();
 
   if (!source.trim()) {
-    throw new Error("Applications API Client source is empty.");
+    throw new Error("Downloaded client source is empty.");
   }
 
   let client;
@@ -48,19 +74,66 @@ function runApplicationClient() {
     )();
   } catch (error) {
     throw new Error(
-      `Failed to evaluate Applications API Client: ${error.message}`
+      `Unable to evaluate client source: ${error.message}`
     );
   }
 
-  if (!client || typeof client.run !== "function") {
+  if (
+    !client ||
+    typeof client.handleFormSubmit !== "function"
+  ) {
     throw new Error(
-      "Invalid client source: expected an object exposing run()."
+      "Invalid client: expected handleFormSubmit()."
     );
   }
 
   console.log(
-    `Applications API Client v${client.version || "unknown"} loaded.`
+    `Loaded Applications API Client ${release.tag_name}.`
   );
 
-  return client.run();
+  return client;
+}
+
+/**
+ * Receives Google Forms submission events.
+ *
+ * This function is called automatically by the installed trigger.
+ */
+function handleApplicationFormSubmit(event) {
+  return loadApplicationsClient().handleFormSubmit(event);
+}
+
+/**
+ * Installs the form submission trigger.
+ *
+ * Run this function manually once after configuring Script Properties.
+ */
+function setupApplicationsFormTrigger() {
+  const properties = PropertiesService.getScriptProperties();
+  const formId = properties.getProperty("APPLICATIONS_FORM_ID");
+
+  if (!formId) {
+    throw new Error(
+      "Set APPLICATIONS_FORM_ID in Script Properties first."
+    );
+  }
+
+  const form = FormApp.openById(formId);
+
+  // Remove duplicate triggers for this handler.
+  ScriptApp.getProjectTriggers()
+    .filter(trigger =>
+      trigger.getHandlerFunction() ===
+      "handleApplicationFormSubmit"
+    )
+    .forEach(trigger => ScriptApp.deleteTrigger(trigger));
+
+  ScriptApp.newTrigger("handleApplicationFormSubmit")
+    .forForm(form)
+    .onFormSubmit()
+    .create();
+
+  console.log(
+    `Submission trigger installed for form ${formId}.`
+  );
 }
