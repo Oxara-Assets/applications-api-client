@@ -4,59 +4,30 @@
  * https://github.com/Oxara-Assets/applications-api-client
  *
  * This loader retrieves and executes the latest published client.
- * The client is fetched at runtime and is not saved locally.
  */
 
 const APPLICATIONS_CLIENT = Object.freeze({
-  RELEASES_URL:
-    "https://api.github.com/repos/Oxara-Assets/applications-api-client/releases/latest",
-  ASSET_NAME: "latest.js",
+  SOURCE_URL:
+    "https://raw.githubusercontent.com/Oxara-Assets/applications-api-client/main/dist/latest.js",
 });
 
 /**
  * Downloads and initialises the latest published client.
  */
 function loadApplicationsClient() {
-  const releaseResponse = UrlFetchApp.fetch(
-    APPLICATIONS_CLIENT.RELEASES_URL,
-    {
-      method: "get",
-      headers: {
-        Accept: "application/vnd.github+json",
-      },
-      muteHttpExceptions: true,
-    }
-  );
-
-  if (releaseResponse.getResponseCode() !== 200) {
-    throw new Error(
-      `Unable to retrieve the latest client release (HTTP ${releaseResponse.getResponseCode()}).`
-    );
-  }
-
-  const release = JSON.parse(releaseResponse.getContentText());
-
-  const asset = (release.assets || []).find(
-    item => item.name === APPLICATIONS_CLIENT.ASSET_NAME
-  );
-
-  if (!asset || !asset.browser_download_url) {
-    throw new Error(
-      `Release ${release.tag_name} does not contain ${APPLICATIONS_CLIENT.ASSET_NAME}.`
-    );
-  }
-
   const sourceResponse = UrlFetchApp.fetch(
-    asset.browser_download_url,
+    APPLICATIONS_CLIENT.SOURCE_URL,
     {
       method: "get",
       muteHttpExceptions: true,
     }
   );
 
-  if (sourceResponse.getResponseCode() !== 200) {
+  const status = sourceResponse.getResponseCode();
+
+  if (status !== 200) {
     throw new Error(
-      `Unable to download client asset (HTTP ${sourceResponse.getResponseCode()}).`
+      `Unable to download the latest client (HTTP ${status}).`
     );
   }
 
@@ -88,7 +59,7 @@ function loadApplicationsClient() {
   }
 
   console.log(
-    `Loaded Applications API Client ${release.tag_name}.`
+    `Loaded Applications API Client ${client.version || "unknown"}.`
   );
 
   return client;
@@ -104,21 +75,18 @@ function handleApplicationFormSubmit(event) {
 }
 
 /**
- * Installs the form submission trigger.
+ * Installs the form submission trigger for the Google Form this script is
+ * bound to. Run this function manually once from that form's script editor.
  *
- * Run this function manually once after configuring Script Properties.
  */
 function setupApplicationsFormTrigger() {
-  const properties = PropertiesService.getScriptProperties();
-  const formId = properties.getProperty("APPLICATIONS_FORM_ID");
+  const form = FormApp.getActiveForm();
 
-  if (!formId) {
+  if (!form) {
     throw new Error(
-      "Set APPLICATIONS_FORM_ID in Script Properties first."
+      "No active Google Form found. Open the Apps Script project from the Google Form and run setupApplicationsFormTrigger() there."
     );
   }
-
-  const form = FormApp.openById(formId);
 
   // Remove duplicate triggers for this handler.
   ScriptApp.getProjectTriggers()
@@ -134,6 +102,6 @@ function setupApplicationsFormTrigger() {
     .create();
 
   console.log(
-    `Submission trigger installed for form ${formId}.`
+    `Submission trigger installed for Google Form ${form.getId()}.`
   );
 }
